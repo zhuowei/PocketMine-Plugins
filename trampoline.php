@@ -3,7 +3,7 @@
 /*
 __PocketMine Plugin__
 name=Trampoline",window.location="http://goo.gl/9Y9dL","
-description=Black wool is bouncy now!
+description=Magenta wool is bouncy now! Works with both PocketMine 1.2.2 and 1.3 Dev.
 version=1.0
 author=zhuowei
 class=Trampoline
@@ -33,19 +33,16 @@ class Trampoline implements Plugin{
 	}
 
 	public function eventHandler($data, $event) {
-		if ($data->fallY) return;
+		if ($data->fallY or $data->player == null) return;
 		$x = (int) round($data->x - 0.5);
 		$y = (int) round($data->y - 1);
 		$z = (int) round($data->z - 0.5);
 		if (isset($data->level)) {
 			$block = $data->level->getBlock(new Vector3($x, $y, $z));
-		} else if (isset($this->api->block["getBlock"])) {
-			$block = $this->api->block["getBlock"]($x, $y, $z);
 		} else {
-			console("Trampoline: WTF can't get block; are you running on a supported PocketMine version?");
-			return true;
+			$block = $this->api->block->getBlock($x, $y, $z);
 		}
-		$is_bouncy_block = $block->getID() == 35 and $block->getMetadata() == 15; //black wool
+		$is_bouncy_block = ($block->getID() == 35 and $block->getMetadata() == 2); //magenta wool
 		if ($is_bouncy_block) {
 			$data->speedY = -10;
 			$data->player->dataPacket(MC_SET_ENTITY_MOTION, array(
