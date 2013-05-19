@@ -34,7 +34,7 @@ class NPCTest implements Plugin{
 		$this->api->console->register("rmnpc", "Remove an NPC. /rmnpc [name]", array($this, "rmcommand"));
 		$this->api->event("server.tick", array($this, "tickHandler"));
 		$this->config = new Config($this->path."config.yml", CONFIG_YAML, array(
-			"npcs" => array();
+			"npcs" => array(),
 		));
 		$this->spawnAllNpcs();
 
