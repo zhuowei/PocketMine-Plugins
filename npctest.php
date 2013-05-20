@@ -2,9 +2,9 @@
 
 /*
 __PocketMine Plugin__
-name=NPCTest",window.location="http://goo.gl/9Y9dL","
+name=NPCTest
 description=Create some NPCs!
-version=1.0
+version=1.1
 author=zhuowei
 class=NPCTest
 apiversion=7
@@ -15,6 +15,8 @@ Small Changelog
 ===============
 
 1.0: Initial release
+
+1.1: NPCs now chase you
 
 */
 
@@ -107,21 +109,24 @@ class NPCTest implements Plugin{
 		$this->api->entity->spawnToAll($this->api->level->getDefault(), $entityit->eid);
 		$npcplayer->entity = $entityit;
 		array_push($this->npclist, $npcplayer);
-		$this->config->get("npcs")[$npcname] = array(
+		$npcconf = array(
 			"Pos" => array(
 				0 => $location->x,
 				1 => $location->y,
 				2 => $location->z,
 			),
+			"mobile" => true,
 		);
+		$this->config->get("npcs")[$npcname] = $npcconf;
 		$this->config->save();
+		$npcplayer->data["npcconf"] = $npcconf;
 	}
 
 	public function removeNpc($npcname) {
 		foreach(array_keys($this->npclist) as $pk) {
 			$p = $this->npclist[$pk];
 			if ($p->entity->name === $npcname) {
-				$this->server->api->entity->remove($p->entity->eid);
+				$this->api->entity->remove($p->entity->eid);
 				unset($this->npclist[$pk]);
 				break;
 			}
@@ -155,41 +160,44 @@ class NPCTest implements Plugin{
 						$ydiff = $target->y - $p->entity->y;
 						$zdiff = $target->z - $p->entity->z;
 						$distaway = pow($xdiff, 2) + pow($ydiff, 2) + pow($zdiff, 2);
-						if ($distaway > 1) {
-							$angle = atan2($zdiff, $xdiff);
-							$speedX = cos($angle) * 0.1;
-							$speedZ = sin($angle) * 0.1;
+						$angle = atan2($zdiff, $xdiff);
+						if ($p->data["npcconf"]["mobile"]) {
+							if ($distaway > 1) {
 
-							$speedY = 0;
-							if ($ydiff > 0) {
-								if (!$p->entity->fallY) {
-									$speedY = 0.5;
-								} else {
-									$speedY = $p->entity->speedY;
-								}
+								$speedX = cos($angle) * 0.2;
+								$speedZ = sin($angle) * 0.2;
+
+
+								$p->entity->speedX = $speedX;
+								$p->entity->speedZ = $speedZ;
 							}
-
-							$p->entity->speedX = $speedX;
-							$p->entity->speedY = $speedY;
-							$p->entity->speedZ = $speedZ;
-							$p->entity->yaw = (($angle * 180) / M_PI) - 90;
-							$this->fireMoveEvent($p->entity);
+						} else {
+							$p->entity->speedX = 0;
+							$p->entity->speedZ = 0;
 						}
+						$p->entity->yaw = (($angle * 180) / M_PI) - 90;
+						$this->fireMoveEvent($p->entity);
+
 					}
 				}
 				$mindist = -1;
 				$minplayer = null;
 				foreach($this->api->player->getAll($p->entity->level) as $otherp) {
 					if ($otherp === $p) continue;
+					if (!$otherp->connected or !$otherp->spawned) continue;
 					$distaway = pow($p->x - $otherp->x, 2) + pow($p->y - $otherp->y, 2) + pow($p->z - $otherp->z, 2);
 					if ($minplayer == null || $distaway < $mindist) {
 						$mindist = $distaway;
 						$minplayer = $otherp;
 					}
 				}
-				$p->data["target"] = $minplayer->entity;
+				if (!($minplayer instanceof Player) or $minplayer == null) {
+					$p->data["target"] = null;
+				} else {
+					$p->data["target"] = $minplayer->entity;
+				}
 			}
-			//TODO: physics on the players. Looking/attacking
+			//TODO: more physics on the players. Attacking
 		}
 	}
 
