@@ -22,10 +22,11 @@ Small Changelog
 
 class NPCTest implements Plugin{
 
-	private $api, $npclist, $config, $path;
+	private $api, $npclist, $config, $path, $ticksuntilupdate;
 	public function __construct(ServerAPI $api, $server = false){
 		$this->api = $api;
 		$this->npclist = array();
+		$this->ticksuntilupdate = 0;
 	}
 	
 	public function init(){
@@ -78,7 +79,7 @@ class NPCTest implements Plugin{
 
 	public function rmcommand($cmd, $params, $issuer, $alias){
 		$npcname = $params[0];
-		removeNpc($npcname);
+		$this->removeNpc($npcname);
 		return "Removed NPC " . $npcname;
 	}
 
@@ -130,6 +131,12 @@ class NPCTest implements Plugin{
 	}
 
 	public function tickHandler($data, $event) {
+		$this->ticksuntilupdate = $this->ticksuntilupdate - 1;
+		$checkupdate = false;
+		if ($this->ticksuntilupdate <= 0) {
+			$this->ticksuntilupdate = 5;
+			$checkupdate = true;
+		}
 		foreach($this->npclist as $p) {
 			if ($p->entity->dead) {
 				$p->entity->fire = 0;
@@ -138,9 +145,72 @@ class NPCTest implements Plugin{
 				$p->entity->updateMetadata();
 				$this->api->entity->spawnToAll($p->level, $p->entity->eid);
 			}
+			if ($checkupdate) {
+				if (isset($p->data["target"]) and $p->data["target"] instanceof Entity) {
+					$target = $p->data["target"];
+					if ($target->closed) {
+						unset($p->data["target"]);
+					} else {
+						$xdiff = $target->x - $p->entity->x;
+						$ydiff = $target->y - $p->entity->y;
+						$zdiff = $target->z - $p->entity->z;
+						$distaway = pow($xdiff, 2) + pow($ydiff, 2) + pow($zdiff, 2);
+						if ($distaway > 1) {
+							$angle = atan2($zdiff, $xdiff);
+							$speedX = cos($angle) * 0.1;
+							$speedZ = sin($angle) * 0.1;
+
+							$speedY = 0;
+							if ($ydiff > 0) {
+								if (!$p->entity->fallY) {
+									$speedY = 0.5;
+								} else {
+									$speedY = $p->entity->speedY;
+								}
+							}
+
+							$p->entity->speedX = $speedX;
+							$p->entity->speedY = $speedY;
+							$p->entity->speedZ = $speedZ;
+							$p->entity->yaw = (($angle * 180) / M_PI) - 90;
+							$this->fireMoveEvent($p->entity);
+						}
+					}
+				}
+				$mindist = -1;
+				$minplayer = null;
+				foreach($this->api->player->getAll($p->entity->level) as $otherp) {
+					if ($otherp === $p) continue;
+					$distaway = pow($p->x - $otherp->x, 2) + pow($p->y - $otherp->y, 2) + pow($p->z - $otherp->z, 2);
+					if ($minplayer == null || $distaway < $mindist) {
+						$mindist = $distaway;
+						$minplayer = $otherp;
+					}
+				}
+				$p->data["target"] = $minplayer->entity;
+			}
 			//TODO: physics on the players. Looking/attacking
 		}
 	}
+
+	public function fireMoveEvent($entity) {
+		if($entity->speedX != 0){
+			$entity->x += $entity->speedX * 5;
+		}
+		if($entity->speedY != 0){
+			$entity->y += $entity->speedY * 5;
+		}
+		if($entity->speedZ != 0){
+			$entity->z += $entity->speedZ * 5;
+		}
+		if(($entity->last[0] != $entity->x or $entity->last[1] != $entity->y or $entity->last[2] != $entity->z or $entity->last[3] != $entity->yaw or $entity->last[4] != $entity->pitch)){
+			if($this->api->handle("entity.move", $entity) === false){
+				$entity->setPosition($entity->last[0], $entity->last[1], $entity->last[2], $entity->last[3], $entity->last[4]);
+			}
+			$entity->updateLast();
+		}
+	}
+
 	
 	public function __destruct(){
 
