@@ -7,7 +7,7 @@ description=Create some NPCs!
 version=1.1
 author=zhuowei
 class=NPCTest
-apiversion=7
+apiversion=9
 */
 
 /* 
@@ -17,6 +17,8 @@ Small Changelog
 1.0: Initial release
 
 1.1: NPCs now chase you
+
+1.2: NPCs now save, updated for API 9, added allstatic configuration parameter to emulate 1.0 behaviour
 
 */
 
@@ -35,9 +37,10 @@ class NPCTest implements Plugin{
 		$this->path = $this->api->plugin->configPath($this);
 		$this->api->console->register("spawnnpc", "Add an NPC. /spawnnpc [name] [player location] OR /spawnnpc [name] <x> <y> <z> <world>", array($this, "command"));
 		$this->api->console->register("rmnpc", "Remove an NPC. /rmnpc [name]", array($this, "rmcommand"));
-		$this->api->event("server.tick", array($this, "tickHandler"));
+		$this->api->schedule(5, array($this, "tickHandler"), array(), true);
 		$this->config = new Config($this->path."config.yml", CONFIG_YAML, array(
 			"npcs" => array(),
+			"allstatic" => false,
 		));
 		$this->spawnAllNpcs();
 
@@ -51,8 +54,8 @@ class NPCTest implements Plugin{
 		}
 		foreach(array_keys($npcconflist) as $pname) {
 			$p = $npcconflist[$pname];
-			$pos = new Position($this->api->level->getDefault(), $p["Pos"][0], $p["Pos"][1], $p["Pos"][2]);
-			createNpc($pname, $pos);
+			$pos = new Position($p["Pos"][0], $p["Pos"][1], $p["Pos"][2], $this->api->level->getDefault());
+			$this->createNpc($pname, $pos);
 		}
 	}
 
@@ -106,7 +109,7 @@ class NPCTest implements Plugin{
 			"player" => $npcplayer,
 		));
 		$entityit->setName($npcname);
-		$this->api->entity->spawnToAll($this->api->level->getDefault(), $entityit->eid);
+		$this->api->entity->spawnToAll($entityit);
 		$npcplayer->entity = $entityit;
 		array_push($this->npclist, $npcplayer);
 		$npcconf = array(
@@ -117,7 +120,10 @@ class NPCTest implements Plugin{
 			),
 			"mobile" => true,
 		);
-		$this->config->get("npcs")[$npcname] = $npcconf;
+		$entireArr = $this->config->get("npcs");
+		$entireArr[$npcname] = $npcconf;
+		$this->config->set("npcs", $entireArr);
+		//console($this->config->get("npcs")[$npcname]);
 		$this->config->save();
 		$npcplayer->data["npcconf"] = $npcconf;
 	}
@@ -137,18 +143,14 @@ class NPCTest implements Plugin{
 
 	public function tickHandler($data, $event) {
 		$this->ticksuntilupdate = $this->ticksuntilupdate - 1;
-		$checkupdate = false;
-		if ($this->ticksuntilupdate <= 0) {
-			$this->ticksuntilupdate = 5;
-			$checkupdate = true;
-		}
+		$checkupdate = true;
 		foreach($this->npclist as $p) {
 			if ($p->entity->dead) {
 				$p->entity->fire = 0;
 				$p->entity->air = 300;
 				$p->entity->setHealth(20, "respawn");
 				$p->entity->updateMetadata();
-				$this->api->entity->spawnToAll($p->level, $p->entity->eid);
+				$this->api->entity->spawnToAll($p->entity->eid);
 			}
 			if ($checkupdate) {
 				if (isset($p->data["target"]) and $p->data["target"] instanceof Entity) {
@@ -161,7 +163,7 @@ class NPCTest implements Plugin{
 						$zdiff = $target->z - $p->entity->z;
 						$distaway = pow($xdiff, 2) + pow($ydiff, 2) + pow($zdiff, 2);
 						$angle = atan2($zdiff, $xdiff);
-						if ($p->data["npcconf"]["mobile"]) {
+						if (!$this->config->get("allstatic") and $p->data["npcconf"]["mobile"]) {
 							if ($distaway > 1) {
 
 								$speedX = cos($angle) * 0.2;
@@ -202,6 +204,7 @@ class NPCTest implements Plugin{
 	}
 
 	public function fireMoveEvent($entity) {
+		//console($entity);
 		if($entity->speedX != 0){
 			$entity->x += $entity->speedX * 5;
 		}
@@ -216,6 +219,18 @@ class NPCTest implements Plugin{
 				$entity->setPosition($entity->last[0], $entity->last[1], $entity->last[2], $entity->last[3], $entity->last[4]);
 			}
 			$entity->updateLast();
+			$players = $this->api->player->getAll($this->level);
+			if($entity->player instanceof Player){
+				unset($players[$entity->player->CID]);
+			}
+			$this->api->player->broadcastPacket($players, MC_MOVE_ENTITY_POSROT, array(
+				"eid" => $entity->eid,
+				"x" => $entity->x,
+				"y" => $entity->y,
+				"z" => $entity->z,
+				"yaw" => $entity->yaw,
+				"pitch" => $entity->pitch,
+			));
 		}
 	}
 
