@@ -219,7 +219,7 @@ class NPCTest implements Plugin{
 				$entity->setPosition($entity->last[0], $entity->last[1], $entity->last[2], $entity->last[3], $entity->last[4]);
 			}
 			$entity->updateLast();
-			$players = $this->api->player->getAll($this->level);
+			$players = $this->api->player->getAll($entity->level);
 			if($entity->player instanceof Player){
 				unset($players[$entity->player->CID]);
 			}
