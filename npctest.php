@@ -20,6 +20,8 @@ Small Changelog
 
 1.2: NPCs now save, updated for API 9, added allstatic configuration parameter to emulate 1.0 behaviour
 
+1.2.1: Killing an NPC no longer crashes the server
+
 */
 
 
@@ -150,7 +152,7 @@ class NPCTest implements Plugin{
 				$p->entity->air = 300;
 				$p->entity->setHealth(20, "respawn");
 				$p->entity->updateMetadata();
-				$this->api->entity->spawnToAll($p->entity->eid);
+				$this->api->entity->spawnToAll($p->entity);
 			}
 			if ($checkupdate) {
 				if (isset($p->data["target"]) and $p->data["target"] instanceof Entity) {
